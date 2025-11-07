@@ -1,0 +1,54 @@
+name: OWASP ZAP Scan
+
+# Déclenchement automatique après chaque push ou pull request sur main
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Récupérer le code du dépôt
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Installer PHP (si nécessaire)
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      # 3️⃣ Lancer le serveur PHP en arrière-plan
+      - name: Start PHP Server
+        run: php -S 127.0.0.1:8000 -t ./ &
+
+      # 4️⃣ Installer Docker si ce n'est pas déjà fait (ZAP via Docker)
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v2
+
+      # 5️⃣ Lancer OWASP ZAP en mode daemon
+      - name: Start ZAP Daemon
+        run: |
+          docker run -d --name zap -u zap -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -port 8080 -host 0.0.0.0 -config api.disablekey=true
+          sleep 15
+
+      # 6️⃣ Lancer le scan rapide sur l'application
+      - name: Run ZAP Quick Scan
+        run: |
+          docker run -u zap --rm --link zap owasp/zap2docker-stable zap-cli --zap-url http://zap -p 8080 quick-scan --self-contained http://127.0.0.1:8000
+
+      # 7️⃣ Générer le rapport TXT
+      - name: Generate TXT Report
+        run: |
+          docker run -u zap --rm --link zap owasp/zap2docker-stable zap-cli --zap-url http://zap -p 8080 report -o zap_report.txt -f txt
+
+      # 8️⃣ Télécharger le rapport en tant qu'artefact
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: zap-report
+          path: zap_report.txt
