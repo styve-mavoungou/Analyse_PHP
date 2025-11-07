@@ -12,41 +12,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Récupération du code source
       - name: 📦 Récupération du dépôt
         uses: actions/checkout@v4
 
-      # 2️⃣ Vérification de Docker
       - name: 🐳 Vérification de Docker
         run: docker --version
 
-      # 3️⃣ Lancement de l’analyse OWASP ZAP
       - name: ⚡ Lancer l’analyse OWASP ZAP
         run: |
-          echo "Démarrage de l’analyse OWASP ZAP sur le site déployé..."
-          docker run -v $(pwd):/zap/wrk/:rw \
+          echo "Démarrage de l’analyse OWASP ZAP..."
+          docker run -v ${{ github.workspace }}:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
             -t https://dedicated-emerita-unallied.ngrok-free.dev \
-            -r zap_report.html \
-            -w zap_report.txt \
-            -x zap_report.xml \
+            -r /zap/wrk/zap_report.html \
+            -w /zap/wrk/zap_report.txt \
+            -x /zap/wrk/zap_report.xml \
             -I
 
-      # 4️⃣ Enregistrement du rapport texte
+      - name: 🔍 Vérifier les fichiers ZAP
+        run: ls -l zap_report.*
+
       - name: 📄 Upload rapport TXT
         uses: actions/upload-artifact@v4
         with:
           name: zap-rapport-txt
           path: zap_report.txt
 
-      # 5️⃣ Enregistrement du rapport HTML (plus visuel)
       - name: 🌐 Upload rapport HTML
         uses: actions/upload-artifact@v4
         with:
           name: zap-rapport-html
           path: zap_report.html
 
-      # 6️⃣ Enregistrement du rapport XML (optionnel)
       - name: 🧩 Upload rapport XML
         uses: actions/upload-artifact@v4
         with:
