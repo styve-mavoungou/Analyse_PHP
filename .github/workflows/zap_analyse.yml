@@ -12,30 +12,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Récupérer le code source
-      - name: 📦 Checkout dépôt
+      - name: 📥 Cloner le dépôt
         uses: actions/checkout@v4
 
-      # 2️⃣ Vérifier Docker
-      - name: 🐳 Vérification de Docker
-        run: docker --version
-
-      # 3️⃣ Lancer l’analyse ZAP
-      - name: ⚡ Lancer l’analyse OWASP ZAP
+      - name: 🚀 Installer OWASP ZAP
         run: |
-          echo "Démarrage de l’analyse OWASP ZAP..."
-          docker run -v ${{ github.workspace }}:/zap/wrk/:rw \
-            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t https://dedicated-emerita-unallied.ngrok-free.dev \
-            -w /zap/wrk/zap_report.txt
+          sudo apt update
+          sudo apt install -y snapd
+          sudo snap install zaproxy --classic
 
-      # 4️⃣ Vérifier que le fichier TXT existe
-      - name: 🔍 Vérifier le rapport TXT
-        run: ls -l zap_report.txt
+      - name: 🌐 Démarrer l’application locale (serveur PHP)
+        run: |
+          php -S 127.0.0.1:8000 -t . &
+          sleep 5
 
-      # 5️⃣ Upload du rapport TXT
-      - name: 📄 Upload rapport TXT
+      - name: 🔗 Installer Ngrok pour exposer l’application
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok http 8000 > ngrok.log &
+          sleep 7
+          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "URL publique : $NGROK_URL"
+          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+
+      - name: 🔍 Exécuter OWASP ZAP en ligne de commande
+        run: |
+          mkdir -p rapport_zap
+          zaproxy -cmd -quickurl "${{ env.NGROK_URL }}" -quickout "rapport_zap/rapport_zap.txt"
+          echo "Analyse terminée, rapport généré dans rapport_zap/rapport_zap.txt"
+
+      - name: 📦 Sauvegarder le rapport comme artefact
         uses: actions/upload-artifact@v4
         with:
-          name: zap-rapport-txt
-          path: zap_report.txt
+          name: rapport_zap
+          path: rapport_zap/rapport_zap.txt
