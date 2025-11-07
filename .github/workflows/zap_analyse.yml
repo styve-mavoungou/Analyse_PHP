@@ -15,51 +15,24 @@ jobs:
       - name: 📥 Cloner le dépôt
         uses: actions/checkout@v4
 
-      - name: 🌐 Démarrer l’application locale (serveur PHP)
+      - name: 🌐 Lancer le serveur PHP local
         run: |
-          php -S 127.0.0.1:8000 -t . &
+          php -S 0.0.0.0:8000 -t . > server.log 2>&1 &
           sleep 5
+          echo "✅ Serveur PHP démarré sur le port 8000"
 
-      - name: 🔗 Installer Ngrok et exposer le site
-        run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update && sudo apt install -y ngrok jq
-          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok http 8000 > ngrok.log &
-          sleep 7
-          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-          echo "URL publique détectée : $NGROK_URL"
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
-
-      - name: 🧪 Exécuter OWASP ZAP (Docker Baseline Scan)
+      - name: 🐳 Exécuter OWASP ZAP via Docker
         run: |
           mkdir -p rapport_zap
-          echo "Analyse ZAP en cours sur ${{ env.NGROK_URL }} ..."
-          docker run --rm -v ${{ github.workspace }}/rapport_zap:/zap/wrk/:rw \
+          docker run --network host \
+            -v $(pwd)/rapport_zap:/zap/wrk/:rw \
             owasp/zap2docker-stable zap-baseline.py \
-            -t "${{ env.NGROK_URL }}" \
-            -r zap_report.html \
-            -w zap_report.txt \
-            -x zap_report.xml \
-            -I
-          echo "✅ Analyse OWASP ZAP terminée !"
-          ls -l rapport_zap
+            -t http://127.0.0.1:8000 \
+            -r rapport_zap.txt
+          echo "✅ Rapport OWASP ZAP généré dans rapport_zap/rapport_zap.txt"
 
-      - name: 📦 Upload rapport TXT
+      - name: 📦 Sauvegarder le rapport comme artefact
         uses: actions/upload-artifact@v4
         with:
-          name: zap-rapport-txt
-          path: rapport_zap/zap_report.txt
-
-      - name: 🌐 Upload rapport HTML
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-rapport-html
-          path: rapport_zap/zap_report.html
-
-      - name: 🧩 Upload rapport XML
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-rapport-xml
-          path: rapport_zap/zap_report.xml
+          name: rapport_zap
+          path: rapport_zap/rapport_zap.txt
