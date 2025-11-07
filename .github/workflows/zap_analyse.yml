@@ -18,8 +18,10 @@ jobs:
       - name: 🚀 Installer OWASP ZAP
         run: |
           sudo apt update
-          sudo apt install -y snapd
-          sudo snap install zaproxy --classic
+          sudo apt install -y wget openjdk-11-jre
+          wget https://github.com/zaproxy/zaproxy/releases/download/v2.15.0/ZAP_2.15.0_Linux.tar.gz
+          tar -xzf ZAP_2.15.0_Linux.tar.gz
+          mv ZAP_2.15.0 zap
 
       - name: 🌐 Démarrer l’application locale (serveur PHP)
         run: |
@@ -30,7 +32,7 @@ jobs:
         run: |
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update && sudo apt install -y ngrok
+          sudo apt update && sudo apt install -y ngrok jq
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
           ngrok http 8000 > ngrok.log &
           sleep 7
@@ -38,11 +40,14 @@ jobs:
           echo "URL publique : $NGROK_URL"
           echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
 
-      - name: 🔍 Exécuter OWASP ZAP en ligne de commande
+      - name: 🔍 Exécuter OWASP ZAP (analyse complète)
         run: |
           mkdir -p rapport_zap
-          zaproxy -cmd -quickurl "${{ env.NGROK_URL }}" -quickout "rapport_zap/rapport_zap.txt"
-          echo "Analyse terminée, rapport généré dans rapport_zap/rapport_zap.txt"
+          ./zap/zap.sh -cmd -quickurl "${{ env.NGROK_URL }}" -quickprogress -quickout rapport_zap/rapport_zap.txt
+          echo "Analyse terminée."
+          echo "--- Vérification du rapport ---"
+          ls -l rapport_zap || true
+          cat rapport_zap/rapport_zap.txt || echo "⚠️ Rapport introuvable !"
 
       - name: 📦 Sauvegarder le rapport comme artefact
         uses: actions/upload-artifact@v4
