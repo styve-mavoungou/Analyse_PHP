@@ -16,17 +16,17 @@ jobs:
       - name: 📦 Récupération du dépôt
         uses: actions/checkout@v4
 
-      # 2️⃣ Installation de Docker (ZAP s'exécute dans un conteneur)
+      # 2️⃣ Vérification de Docker
       - name: 🐳 Vérification de Docker
         run: docker --version
 
       # 3️⃣ Lancement de l’analyse OWASP ZAP
       - name: ⚡ Lancer l’analyse OWASP ZAP
         run: |
-          echo "Démarrage de l’analyse OWASP ZAP..."
+          echo "Démarrage de l’analyse OWASP ZAP sur le site déployé..."
           docker run -v $(pwd):/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t http://127.0.0.1:8000 \
+            -t https://dedicated-emerita-unallied.ngrok-free.dev \
             -r zap_report.html \
             -w zap_report.txt \
             -x zap_report.xml \
