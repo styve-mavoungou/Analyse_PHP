@@ -1,0 +1,41 @@
+name: 🔍 Analyse DAST avec Nikto
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  nikto_scan:
+    name: Analyse de sécurité Nikto
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧰 Vérifier le code du projet
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Installer Docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+
+      - name: 🚀 Démarrer le serveur PHP local
+        run: |
+          php -S 0.0.0.0:8000 -t . &
+          sleep 5
+
+      - name: 🔎 Exécuter Nikto avec Docker
+        run: |
+          docker run --rm -v $(pwd):/tmp -t sullo/nikto -h http://127.0.0.1:8000 > nikto_report.txt
+
+      - name: 📄 Afficher le rapport Nikto
+        run: cat nikto_report.txt
+
+      - name: 💾 Sauvegarder le rapport dans les artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport_nikto
+          path: nikto_report.txt
