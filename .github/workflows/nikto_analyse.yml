@@ -1,41 +1,41 @@
-name: 🔍 Analyse DAST avec Nikto
+name: Analyse DAST avec Nikto
 
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
 
 jobs:
   nikto_scan:
-    name: Analyse de sécurité Nikto
+    name: Exécuter Nikto sur l'application PHP
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧰 Vérifier le code du projet
+      - name: 🔹 Vérifier le code du dépôt
         uses: actions/checkout@v4
 
-      - name: ⚙️ Installer Docker
+      - name: 🔹 Démarrer le serveur PHP
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
+          sudo apt update
+          sudo apt install -y php
+          php -S 127.0.0.1:8000 -t . > /dev/null 2>&1 &
+          sleep 10
+          echo "✅ Serveur PHP lancé sur http://127.0.0.1:8000"
 
-      - name: 🚀 Démarrer le serveur PHP local
+      - name: 🔹 Installer Nikto
         run: |
-          php -S 0.0.0.0:8000 -t . &
-          sleep 5
+          sudo apt install -y nikto
+          nikto -Version
 
-      - name: 🔎 Exécuter Nikto avec Docker
+      - name: 🔹 Lancer l'analyse Nikto
         run: |
-          docker run --rm -v $(pwd):/tmp -t sullo/nikto -h http://127.0.0.1:8000 > nikto_report.txt
+          mkdir -p rapport_nikto
+          nikto -h http://127.0.0.1:8000 -output rapport_nikto/rapport_nikto.txt -Format txt
+          echo "✅ Rapport Nikto généré dans rapport_nikto/rapport_nikto.txt"
 
-      - name: 📄 Afficher le rapport Nikto
-        run: cat nikto_report.txt
-
-      - name: 💾 Sauvegarder le rapport dans les artefacts
+      - name: 📤 Enregistrer le rapport dans les artefacts
         uses: actions/upload-artifact@v4
         with:
           name: rapport_nikto
-          path: nikto_report.txt
+          path: rapport_nikto/rapport_nikto.txt
