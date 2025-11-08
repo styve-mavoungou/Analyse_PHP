@@ -1,30 +1,113 @@
-name: 🔍 OWASP ZAP Scan Simple
+name: 🔍 OWASP ZAP Scan
 
 on: [push, pull_request]
 
 jobs:
   zap_scan:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
       
-      - name: 🌐 Serveur PHP
+      - name: 🐳 Créer réseau Docker
+        run: docker network create scan-network
+      
+      - name: 🌐 Lancer application PHP
         run: |
-          php -S 0.0.0.0:8000 -t . &
+          docker run -d \
+            --name php-app \
+            --network scan-network \
+            -v $(pwd):/var/www/html \
+            -w /var/www/html \
+            php:8.2-cli \
+            php -S 0.0.0.0:8000 -t .
+          
           sleep 5
+          echo "✅ Application PHP démarrée"
       
-      - name: 🐳 ZAP Scan
+      - name: 🔍 Scanner avec OWASP ZAP
         run: |
           mkdir -p zap-output
-          docker run --rm --network host \
+          
+          echo "🚀 Démarrage du scan..."
+          
+          docker run --rm \
+            --network scan-network \
             -v $(pwd)/zap-output:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:8000 \
-            -r report.html || true
+            zap-baseline.py \
+            -t http://php-app:8000 \
+            -r report.html \
+            -w report.md \
+            -J report.json \
+            -I || true
+          
+          echo "✅ Scan terminé"
       
-      - name: 📦 Upload
+      - name: 📄 Convertir le rapport Markdown en TXT
+        if: always()
+        run: |
+          if [ -f "zap-output/report.md" ]; then
+            # Copier le markdown comme txt (le markdown est déjà du texte lisible)
+            cp zap-output/report.md zap-output/report.txt
+            echo "✅ Rapport TXT créé"
+          else
+            echo "⚠️ Pas de rapport Markdown à convertir"
+          fi
+      
+      - name: 📊 Vérifier les rapports
+        if: always()
+        run: |
+          echo "📁 Rapports générés:"
+          ls -lh zap-output/
+          
+          echo ""
+          echo "📋 Formats disponibles:"
+          [ -f "zap-output/report.html" ] && echo "✅ HTML - Rapport visuel complet"
+          [ -f "zap-output/report.md" ] && echo "✅ Markdown - Format structuré"
+          [ -f "zap-output/report.json" ] && echo "✅ JSON - Données brutes"
+          [ -f "zap-output/report.txt" ] && echo "✅ TXT - Texte brut"
+      
+      - name: 📦 Sauvegarder les rapports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: zap-report
+          name: zap-security-reports
           path: zap-output/
+          if-no-files-found: warn
+      
+      - name: 📝 Résumé dans GitHub Actions
+        if: always()
+        run: |
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          ## 🔍 Résultats du scan OWASP ZAP
+          
+          ### 📦 Rapports disponibles:
+          - **report.html** - Rapport complet avec interface visuelle
+          - **report.md** - Rapport en Markdown
+          - **report.json** - Données JSON pour automatisation
+          - **report.txt** - Rapport en texte brut
+          
+          ### 📥 Comment télécharger:
+          1. Cliquez sur "Summary" en haut de page
+          2. Descendez jusqu'à "Artifacts"
+          3. Téléchargez "zap-security-reports"
+          4. Décompressez l'archive
+          
+          EOF
+          
+          if [ -f "zap-output/report.md" ]; then
+            echo "### 📋 Aperçu des vulnérabilités:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -n 50 zap-output/report.md >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: 🧹 Nettoyage
+        if: always()
+        run: |
+          docker stop php-app 2>/dev/null || true
+          docker rm php-app 2>/dev/null || true
+          docker network rm scan-network 2>/dev/null || true
+          echo "✅ Nettoyage terminé"
