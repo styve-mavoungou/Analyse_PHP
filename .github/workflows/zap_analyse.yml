@@ -10,16 +10,23 @@ jobs:
   zap_scan:
     name: Exécuter OWASP ZAP (avec Ngrok)
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 📥 Cloner le dépôt
         uses: actions/checkout@v4
 
+      - name: 🔧 Configurer PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
       - name: 🌐 Lancer le serveur PHP local
         run: |
-          php -S 127.0.0.1:8000 -t . > server.log 2>&1 &
-          sleep 5
+          nohup php -S 127.0.0.1:8000 -t . > server.log 2>&1 &
           echo "✅ Serveur PHP lancé sur http://127.0.0.1:8000"
+          sleep 3
+          # Vérifier que le serveur répond
+          curl -f http://127.0.0.1:8000 || echo "⚠️ Serveur PHP pas encore prêt"
 
       - name: ⚙️ Installer Ngrok
         run: |
@@ -28,63 +35,90 @@ jobs:
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt update && sudo apt install -y ngrok
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok http 8000 > ngrok.log 2>&1 &
-          sleep 10
+          nohup ngrok http 8000 --log=stdout > ngrok.log 2>&1 &
+          echo "⏳ Attente du démarrage de Ngrok..."
+          sleep 15
           
+          # Vérifier le tunnel Ngrok
           echo "🔍 Vérification du tunnel Ngrok..."
-          curl -s http://127.0.0.1:4040/api/tunnels | jq
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          NGROK_URL=""
           
-          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            sleep 5
+            RESPONSE=$(curl -s http://127.0.0.1:4040/api/tunnels || echo "{}")
+            NGROK_URL=$(echo $RESPONSE | jq -r '.tunnels[0].public_url // "null"')
+            
+            if [ "$NGROK_URL" != "null" ] && [ ! -z "$NGROK_URL" ]; then
+              echo "✅ Tunnel Ngrok prêt : $NGROK_URL"
+              echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+              break
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT+1))
+            echo "⏱️  Tentative $RETRY_COUNT/$MAX_RETRIES - Ngrok pas encore prêt..."
+          done
           
           if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
-            echo "❌ Erreur : Ngrok n'a pas démarré correctement."
+            echo "❌ Erreur : Ngrok n'a pas démarré correctement après $MAX_RETRIES tentatives"
+            echo "📄 Logs Ngrok :"
             cat ngrok.log
+            echo "📄 Logs serveur :"
+            cat server.log
             exit 1
           fi
-          
-          echo "✅ Tunnel Ngrok prêt : $NGROK_URL"
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+
+      - name: 🔍 Vérifier l'accessibilité de l'application
+        run: |
+          echo "🌐 Test d'accès à l'application via Ngrok..."
+          curl -f "${{ env.NGROK_URL }}" && echo "✅ Application accessible via Ngrok" || echo "❌ Application inaccessible via Ngrok"
 
       - name: 🐳 Exécuter OWASP ZAP via Docker
         run: |
           mkdir -p rapport_zap
           echo "🚀 Démarrage du scan ZAP sur : ${{ env.NGROK_URL }}"
-          docker pull owasp/zap2docker-stable
           
-          # Exécuter ZAP en mode baseline avec -I pour ignorer les avertissements
-          # Le || true permet de continuer même si des vulnérabilités sont trouvées
+          # Scan principal avec génération de rapport HTML
           docker run --rm \
             -v "$(pwd)/rapport_zap:/zap/wrk/:rw" \
-            owasp/zap2docker-stable zap-baseline.py \
+            -t owasp/zap2docker-stable zap-baseline.py \
             -t "${{ env.NGROK_URL }}" \
+            -c zap-config.conf \
             -r rapport_zap.html \
-            -I || true
+            -I \
+            -j \
+            -m 5 || echo "⚠️ Scan ZAP terminé avec des alertes (statut non-zero)"
           
-          echo "✅ Scan ZAP terminé"
+          echo "📊 Scan ZAP terminé"
 
-      - name: 📊 Vérifier si le rapport a été généré
+      - name: 📊 Générer rapport texte supplémentaire
         run: |
-          if [ -f "rapport_zap/rapport_zap.html" ]; then
-            echo "✅ Rapport HTML généré avec succès"
-            ls -lh rapport_zap/
-          else
-            echo "⚠️ Aucun rapport trouvé, mais on continue..."
-          fi
+          echo "📝 Génération du rapport texte..."
+          docker run --rm \
+            -v "$(pwd)/rapport_zap:/zap/wrk/:rw" \
+            -t owasp/zap2docker-stable zap-baseline.py \
+            -t "${{ env.NGROK_URL }}" \
+            -c zap-config.conf \
+            -w rapport_zap.txt \
+            -I || true
 
       - name: 📦 Sauvegarder les rapports comme artefacts
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: rapport_zap
           path: rapport_zap/
+          retention-days: 7
 
-      - name: 📝 Résumé du scan
-        if: always()
+      - name: 📄 Afficher un résumé
         run: |
-          echo "## 🔍 Résumé du scan OWASP ZAP" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL scannée:** ${{ env.NGROK_URL }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Durée:** 57s" >> $GITHUB_STEP_SUMMARY
-          echo "- **Rapport:** Disponible dans les artefacts" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📥 Téléchargez le rapport complet dans les artefacts de cette exécution." >> $GITHUB_STEP_SUMMARY
+          echo "📋 Résumé de l'analyse ZAP"
+          if [ -f "rapport_zap/rapport_zap.html" ]; then
+            echo "✅ Rapport HTML généré avec succès"
+          else
+            echo "❌ Rapport HTML non généré"
+          fi
+          if [ -f "rapport_zap/rapport_zap.txt" ]; then
+            echo "📄 Contenu du rapport texte :"
+            head -50 rapport_zap/rapport_zap.txt || echo "Rapport texte vide ou inaccessible"
+          fi
