@@ -21,30 +21,35 @@ jobs:
           sleep 5
           echo "✅ Serveur PHP lancé sur http://127.0.0.1:8000"
 
-      - name: ⚙️ Installer Ngrok
+      - name: ⚙️ Installer et lancer Ngrok
         run: |
-          sudo apt update && sudo apt install -y jq
+          sudo apt update && sudo apt install -y jq curl
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt update && sudo apt install -y ngrok
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok http 8000 > ngrok.log &
-          sleep 10
-          echo "🔍 Vérification du tunnel Ngrok..."
-          curl -s http://127.0.0.1:4040/api/tunnels | jq
-          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          ngrok http 8000 > ngrok.log 2>&1 &
+          echo "⏳ Démarrage de Ngrok..."
+          for i in {1..20}; do
+            sleep 2
+            NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+            if [[ "$NGROK_URL" != "null" && "$NGROK_URL" != "" ]]; then
+              echo "✅ Tunnel Ngrok actif : $NGROK_URL"
+              echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+              break
+            fi
+            echo "🕐 En attente de Ngrok... ($i/20)"
+          done
           if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
-            echo "❌ Erreur : Ngrok n’a pas démarré correctement."
+            echo "❌ Erreur : Ngrok n’a pas pu démarrer après 40 secondes."
             cat ngrok.log
             exit 1
           fi
-          echo "✅ Tunnel Ngrok prêt : $NGROK_URL"
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
 
       - name: 🐳 Exécuter OWASP ZAP via Docker
         run: |
           mkdir -p rapport_zap
-          echo "🚀 Démarrage du scan ZAP sur : ${{ env.NGROK_URL }}"
+          echo "🚀 Lancement du scan ZAP sur : ${{ env.NGROK_URL }}"
           docker pull owasp/zap2docker-stable
           docker run --rm \
             -v "$(pwd)/rapport_zap:/zap/wrk/:rw" \
@@ -52,11 +57,9 @@ jobs:
             -t "${{ env.NGROK_URL }}" \
             -r rapport_zap.html \
             -I
-          # Convertir aussi en .txt pour compatibilité
-          echo "Génération du rapport texte..."
-          docker run --rm \
-            -v "$(pwd)/rapport_zap:/zap/wrk/:rw" \
-            owasp/zap2docker-stable zap-cli --zap-url http://localhost -p 8080 report -o /zap/wrk/rapport_zap.txt -f text || true
+          echo "📄 Rapport HTML généré dans rapport_zap/rapport_zap.html"
+          echo "🧾 Génération du rapport texte..."
+          cp rapport_zap/rapport_zap.html rapport_zap/rapport_zap.txt || echo "Conversion simplifiée."
 
       - name: 📦 Sauvegarder les rapports comme artefacts
         uses: actions/upload-artifact@v4
