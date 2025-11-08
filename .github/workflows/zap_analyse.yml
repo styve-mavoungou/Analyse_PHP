@@ -1,138 +1,30 @@
-name: 🔍 Analyse DAST avec OWASP ZAP
+name: 🔍 OWASP ZAP Scan Simple
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 jobs:
   zap_scan:
-    name: Exécuter OWASP ZAP (avec Ngrok)
     runs-on: ubuntu-latest
-    
     steps:
-      - name: 📥 Cloner le dépôt
-        uses: actions/checkout@v4
-
-      - name: 🌐 Lancer le serveur PHP local
+      - uses: actions/checkout@v4
+      
+      - name: 🌐 Serveur PHP
         run: |
-          php -S 127.0.0.1:8000 -t . > server.log 2>&1 &
-          SERVER_PID=$!
+          php -S 0.0.0.0:8000 -t . &
           sleep 5
-          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          echo "✅ Serveur PHP lancé sur http://127.0.0.1:8000 (PID: $SERVER_PID)"
-          
-          # Vérifier que le serveur répond
-          curl -v http://127.0.0.1:8000 || echo "⚠️ Le serveur ne répond pas encore"
-
-      - name: ⚙️ Installer et configurer Ngrok
+      
+      - name: 🐳 ZAP Scan
         run: |
-          # Installation de Ngrok
-          wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-          tar xzf ngrok-v3-stable-linux-amd64.tgz
-          chmod +x ngrok
-          
-          # Configuration du token
-          ./ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          
-          # Démarrage du tunnel
-          ./ngrok http 8000 --log=stdout > ngrok.log 2>&1 &
-          NGROK_PID=$!
-          echo "NGROK_PID=$NGROK_PID" >> $GITHUB_ENV
-          
-          # Attendre que ngrok démarre
-          echo "⏳ Attente du démarrage de Ngrok..."
-          sleep 15
-          
-          # Récupérer l'URL publique
-          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-          
-          # Vérification
-          if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
-            echo "❌ Erreur : Ngrok n'a pas démarré correctement."
-            echo "📋 Logs Ngrok:"
-            cat ngrok.log
-            echo "📋 Logs serveur PHP:"
-            cat server.log
-            exit 1
-          fi
-          
-          echo "✅ Tunnel Ngrok actif : $NGROK_URL"
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
-          
-          # Test d'accès
-          curl -I "$NGROK_URL" || echo "⚠️ URL Ngrok non accessible"
-
-      - name: 🐳 Exécuter OWASP ZAP
-        continue-on-error: true
-        id: zap_scan
-        run: |
-          echo "🚀 Lancement du scan ZAP sur : ${{ env.NGROK_URL }}"
-          
-          # Créer le dossier de sortie
-          mkdir -p ${{ github.workspace }}/zap-reports
-          
-          # Télécharger l'image Docker
-          docker pull ghcr.io/zaproxy/zaproxy:stable
-          
-          # Exécuter le scan ZAP
-          docker run --rm \
-            --network host \
-            -v ${{ github.workspace }}/zap-reports:/zap/wrk:rw \
+          mkdir -p zap-output
+          docker run --rm --network host \
+            -v $(pwd)/zap-output:/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-            -t "${{ env.NGROK_URL }}" \
-            -r zap-report.html \
-            -w zap-report.md \
-            -J zap-report.json \
-            -I
-          
-          echo "scan_completed=true" >> $GITHUB_OUTPUT
-
-      - name: 📊 Afficher les résultats
-        if: always()
-        run: |
-          echo "📁 Contenu du dossier de rapports:"
-          ls -lah ${{ github.workspace }}/zap-reports/ || echo "Aucun fichier trouvé"
-          
-          if [ -f "${{ github.workspace }}/zap-reports/zap-report.html" ]; then
-            echo "✅ Rapport HTML généré"
-          else
-            echo "❌ Pas de rapport HTML"
-          fi
-
-      - name: 📦 Upload des rapports ZAP
+            zap-baseline.py -t http://localhost:8000 \
+            -r report.html || true
+      
+      - name: 📦 Upload
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: zap-security-report
-          path: ${{ github.workspace }}/zap-reports/
-          if-no-files-found: warn
-
-      - name: 🧹 Nettoyage
-        if: always()
-        run: |
-          # Arrêter Ngrok
-          kill ${{ env.NGROK_PID }} 2>/dev/null || true
-          
-          # Arrêter le serveur PHP
-          kill ${{ env.SERVER_PID }} 2>/dev/null || true
-          
-          echo "✅ Processus arrêtés"
-
-      - name: 📝 Résumé
-        if: always()
-        run: |
-          echo "## 🔍 Résumé du scan OWASP ZAP" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL scannée:** ${{ env.NGROK_URL }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Scan terminé:** ${{ steps.zap_scan.outputs.scan_completed || 'false' }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📥 **Téléchargez le rapport** dans la section 'Artifacts' ci-dessous" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "${{ github.workspace }}/zap-reports/zap-report.md" ]; then
-            echo "### Aperçu des alertes" >> $GITHUB_STEP_SUMMARY
-            head -n 50 "${{ github.workspace }}/zap-reports/zap-report.md" >> $GITHUB_STEP_SUMMARY || true
-          fi
+          name: zap-report
+          path: zap-output/
