@@ -1,0 +1,39 @@
+name: 🔍 Analyse SAST avec Semgrep
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  semgrep_scan:
+    name: Exécuter Semgrep (analyse statique)
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Récupération du code source
+      - name: 📦 Cloner le dépôt
+        uses: actions/checkout@v4
+
+      # 2️⃣ Installation de Semgrep
+      - name: 🧰 Installer Semgrep
+        run: |
+          pip install semgrep
+
+      # 3️⃣ Exécution de l’analyse
+      - name: 🚀 Lancer l’analyse Semgrep
+        run: |
+          semgrep scan --config=auto --error --timeout 300 . > rapport_semgrep.txt
+
+      # 4️⃣ Afficher le résultat dans la console
+      - name: 📄 Afficher le rapport dans le terminal
+        run: cat rapport_semgrep.txt
+
+      # 5️⃣ Sauvegarde du rapport comme artefact (version 4)
+      - name: 📤 Sauvegarder le rapport d’analyse
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport_semgrep
+          path: rapport_semgrep.txt
+          retention-days: 7  # durée de conservation facultative (par défaut : 90 jours)
