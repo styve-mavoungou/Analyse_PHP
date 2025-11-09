@@ -1,4 +1,4 @@
-name: 🔍 Analyse SAST avec Semgrep
+name: Analyse SAST avec Semgrep
 
 on:
   push:
@@ -8,28 +8,63 @@ on:
 
 jobs:
   semgrep_scan:
-    name: Exécuter l'analyse Semgrep
+    name: Exécuter Semgrep (analyse statique)
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: 📥 Cloner le dépôt
+      # 1️⃣ Cloner le dépôt
+      - name: 📦 Cloner le dépôt
         uses: actions/checkout@v4
-
-      - name: 🐍 Installer Semgrep
+      
+      # 2️⃣ Installer Semgrep
+      - name: 🧰 Installer Semgrep
+        run: pip install semgrep
+      
+      # 3️⃣ Exécuter l'analyse (continuer même si des vulnérabilités sont trouvées)
+      - name: 🚀 Lancer l'analyse Semgrep personnalisée
+        id: semgrep
+        continue-on-error: true
         run: |
-          python3 -m pip install --upgrade pip
-          pip install semgrep
-
-      - name: 🔍 Exécuter l'analyse Semgrep avec les règles personnalisées
+          semgrep scan --config regles_vulnerabilites.yml --text --timeout 300 --no-git-ignore . > rapport_semgrep.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+      
+      # 4️⃣ Afficher le rapport dans la console
+      - name: 📄 Afficher le rapport
+        if: always()
         run: |
-          semgrep scan --config regles_vulnerabilites.yml . > rapport_semgrep.txt || true
-
-      - name: 🕒 Générer un nom de fichier dynamique
-        id: filename
-        run: echo "file_name=rapport_semgrep_$(date +'%Y%m%d_%H%M%S').txt" >> $GITHUB_ENV
-
-      - name: 📤 Publier le rapport Semgrep
+          echo "=== RAPPORT D'ANALYSE SEMGREP ==="
+          cat rapport_semgrep.txt || echo "Aucun rapport généré"
+      
+      # 5️⃣ Sauvegarder le rapport
+      - name: 📤 Sauvegarder le rapport d'analyse
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Rapport-Semgrep
+          name: rapport-semgrep-${{ github.run_number }}
           path: rapport_semgrep.txt
+          retention-days: 30
+      
+      # 6️⃣ Créer un résumé des résultats
+      - name: 📊 Résumé de l'analyse
+        if: always()
+        run: |
+          echo "## 📊 Résumé de l'analyse Semgrep" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Statut:** $([ "${{ steps.semgrep.outputs.exit_code }}" == "0" ] && echo '✅ Aucune vulnérabilité' || echo '⚠️ Vulnérabilités détectées')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Nombre de vulnérabilités:** $(grep -c 'severity:' rapport_semgrep.txt 2>/dev/null || echo '0')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Téléchargez le rapport complet dans les artifacts" >> $GITHUB_STEP_SUMMARY
+      
+      # 7️⃣ Échouer le job uniquement si des vulnérabilités CRITIQUES sont trouvées
+      - name: ⚠️ Vérifier les vulnérabilités critiques
+        if: always()
+        run: |
+          if grep -q "severity: ERROR" rapport_semgrep.txt 2>/dev/null; then
+            echo "❌ ÉCHEC : Des vulnérabilités CRITIQUES ont été détectées !"
+            echo "Veuillez corriger les vulnérabilités avant de merger."
+            exit 1
+          else
+            echo "✅ Aucune vulnérabilité critique détectée"
+            exit 0
+          fi
