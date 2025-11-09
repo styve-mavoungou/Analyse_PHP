@@ -1,0 +1,84 @@
+rules:
+  - id: php-weak-hash-sha256
+    pattern: hash('sha256', $PASSWORD)
+    message: "CRITIQUE: Utilisation de SHA256 pour hasher les mots de passe. SHA256 est trop rapide et vulnérable aux attaques par force brute. Utilisez password_hash() avec PASSWORD_BCRYPT ou PASSWORD_ARGON2ID."
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+
+  - id: php-session-without-regenerate-id
+    pattern: session_start()
+    message: "AVERTISSEMENT: session_start() sans session_regenerate_id(). Cela peut permettre des attaques de fixation de session. Appelez session_regenerate_id(true) après l'authentification."
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-384: Session Fixation"
+
+  - id: php-missing-csrf-protection
+    pattern: |
+      if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+          ...
+      }
+    message: "AVERTISSEMENT: Formulaire POST sans vérification de token CSRF. Ajoutez une protection CSRF pour éviter les attaques Cross-Site Request Forgery."
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-352: Cross-Site Request Forgery (CSRF)"
+      owasp: "A01:2021 - Broken Access Control"
+
+  - id: php-unsanitized-post-data
+    pattern: $VAR = $_POST[$KEY]
+    message: "AVERTISSEMENT: Données POST non validées/nettoyées. Validez et nettoyez toutes les entrées utilisateur."
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-20: Improper Input Validation"
+
+  - id: php-direct-user-input-in-session
+    pattern: $_SESSION[$KEY] = $USER
+    message: "INFO: Stockage de données utilisateur dans la session. Assurez-vous de ne stocker que les données nécessaires."
+    languages: [php]
+    severity: INFO
+
+  # ✅ Correction : utilisation d'un pattern valide pour détecter l'affichage d'erreurs dans des alertes JS
+  - id: php-error-message-in-alert
+    pattern: echo $X
+    message: "AVERTISSEMENT: Vérifiez si echo affiche une alerte JavaScript (ex: alert()). Évitez d’exposer des informations sensibles."
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-209: Generation of Error Message Containing Sensitive Information"
+      owasp: "A04:2021 - Insecure Design"
+
+  - id: php-get-parameter-without-validation
+    pattern: |
+      if (isset($_GET[$KEY])) {
+          $VAR = $_GET[$KEY];
+          ...
+      }
+    message: "AVERTISSEMENT: Paramètre GET utilisé sans validation appropriée. Validez et nettoyez toutes les entrées."
+    languages: [php]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-20: Improper Input Validation"
+
+  - id: php-database-credentials-hardcoded
+    pattern-either:
+      - pattern: $user = "..."
+      - pattern: $pass = "..."
+    message: "CRITIQUE: Credentials de base de données en dur dans le code. Utilisez des variables d'environnement ou un fichier de configuration sécurisé."
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+
+  - id: php-pdo-error-exposure
+    pattern: die("..." . $e->getMessage())
+    message: "CRITIQUE: Exposition de messages d'erreur détaillés. En production, loguez les erreurs au lieu de les afficher."
+    languages: [php]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-209: Generation of Error Message Containing Sensitive Information"
