@@ -1,4 +1,4 @@
-name: Analyse SAST avec Semgrep
+name: 🔍 Analyse SAST avec Semgrep
 
 on:
   push:
@@ -26,17 +26,15 @@ jobs:
           echo "=== Vérification du fichier de règles ==="
           if [ -f "regles_vulnerabilites.yml" ]; then
             echo "✅ Fichier regles_vulnerabilites.yml trouvé"
-            cat regles_vulnerabilites.yml
           else
             echo "❌ Fichier regles_vulnerabilites.yml NON TROUVÉ"
             exit 1
           fi
       
       - name: 🚀 Analyse Semgrep
-        continue-on-error: true
         run: |
           echo "=== DÉBUT DE L'ANALYSE SEMGREP ==="
-          semgrep scan --config regles_vulnerabilites.yml --text --no-git-ignore . > rapport_semgrep.txt 2>&1
+          semgrep scan --config regles_vulnerabilites.yml --text --no-git-ignore . > rapport_semgrep.txt 2>&1 || true
           echo "=== FIN DE L'ANALYSE ==="
       
       - name: 📄 Afficher le rapport complet
@@ -52,6 +50,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rapport-semgrep-run-${{ github.run_number }}
+          name: rapport-semgrep
           path: rapport_semgrep.txt
           retention-days: 30
