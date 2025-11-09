@@ -12,28 +12,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Récupération du code source
+      # 1️⃣ Cloner le dépôt
       - name: 📦 Cloner le dépôt
         uses: actions/checkout@v4
 
-      # 2️⃣ Installation de Semgrep
+      # 2️⃣ Installer Semgrep
       - name: 🧰 Installer Semgrep
-        run: |
-          pip install semgrep
+        run: pip install semgrep
 
-      # 3️⃣ Exécution de l’analyse
-      - name: 🚀 Lancer l’analyse Semgrep
+      # 3️⃣ Exécuter l’analyse avec ton fichier de règles
+      - name: 🚀 Lancer l’analyse Semgrep personnalisée
         run: |
-          semgrep scan --config=auto --error --timeout 300 . > rapport_semgrep.txt
+          semgrep scan --config regles_vulnerabilites.yml --error --timeout 300 . > rapport_semgrep.txt
 
-      # 4️⃣ Afficher le résultat dans la console
-      - name: 📄 Afficher le rapport dans le terminal
+      # 4️⃣ Afficher le rapport dans la console
+      - name: 📄 Afficher le rapport
         run: cat rapport_semgrep.txt
 
-      # 5️⃣ Sauvegarde du rapport comme artefact (version 4)
+      # 5️⃣ Sauvegarder le rapport
       - name: 📤 Sauvegarder le rapport d’analyse
         uses: actions/upload-artifact@v4
         with:
           name: rapport_semgrep
           path: rapport_semgrep.txt
-          retention-days: 7  # durée de conservation facultative (par défaut : 90 jours)
+          retention-days: 7
