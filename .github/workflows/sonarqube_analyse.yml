@@ -1,4 +1,4 @@
-name:  Analyse SAST avec SonarQube
+name: Analyse SAST avec SonarQube 
 
 on:
   push:
@@ -8,58 +8,40 @@ on:
 
 jobs:
   sonarqube_scan:
-    name: Exécuter SonarQube
     runs-on: ubuntu-latest
-
     steps:
-      - name: 📦 Cloner le dépôt
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ☕ Installer Java (requis par SonarScanner)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 🧰 Installer SonarScanner
+      - name: Install sonar-scanner
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y unzip
+          sudo apt-get install -y unzip curl
           curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-5.0.1.3006-linux.zip
           unzip sonar-scanner.zip -d /opt/
           mv /opt/sonar-scanner-* /opt/sonar-scanner
           echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
 
-      - name: ⚙️ Vérifier la configuration SonarQube
+      - name: Show sonar config file
         run: |
-          echo "=== Fichier de configuration ==="
-          cat sonar-project.properties
-          echo "==============================="
+          echo "=== sonar-project.properties ==="
+          cat sonar-project.properties || true
 
-      - name: 🚀 Lancer l’analyse SonarQube
+      - name: Run SonarScanner (use public ngrok URL to reach your SonarQube)
         env:
-          SONAR_HOST_URL: http://127.0.0.1:9000
+          SONAR_HOST_URL: https://dedicated-emerita-unallied.ngrok-free.dev    
           SONAR_LOGIN: ${{ secrets.SONAR_PHP_TOKEN }}
         run: |
-          echo "=== DÉBUT DE L'ANALYSE ==="
+          echo "Using SONAR_HOST_URL=$SONAR_HOST_URL"
           sonar-scanner \
             -Dsonar.projectKey=projet_php \
             -Dsonar.sources=. \
             -Dsonar.host.url=$SONAR_HOST_URL \
             -Dsonar.login=$SONAR_LOGIN \
             -Dsonar.sourceEncoding=UTF-8
-          echo "=== FIN DE L'ANALYSE ==="
-
-      - name: 📤 Sauvegarder le rapport brut
-        if: always()
-        run: |
-          echo "Analyse terminée à $(date)" > rapport_sonarqube.txt
-          echo "Consulte le tableau de bord SonarQube pour les résultats." >> rapport_sonarqube.txt
-
-      - name: 📁 Archiver le rapport
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rapport-sonarqube
-          path: rapport_sonarqube.txt
-          retention-days: 30
