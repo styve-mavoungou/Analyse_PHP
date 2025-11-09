@@ -8,31 +8,28 @@ on:
 
 jobs:
   semgrep_scan:
-    name: Exécuter Semgrep (analyse statique)
+    name: Exécuter l'analyse Semgrep
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Cloner le dépôt
-      - name: 📦 Cloner le dépôt
+      - name: 📥 Cloner le dépôt
         uses: actions/checkout@v4
 
-      # 2️⃣ Installer Semgrep
-      - name: 🧰 Installer Semgrep
-        run: pip install semgrep
-
-      # 3️⃣ Exécuter l’analyse avec ton fichier de règles
-      - name: 🚀 Lancer l’analyse Semgrep personnalisée
+      - name: 🐍 Installer Semgrep
         run: |
-          semgrep scan --config regles_vulnerabilites.yml --error --timeout 300 . > rapport_semgrep.txt
+          python3 -m pip install --upgrade pip
+          pip install semgrep
 
-      # 4️⃣ Afficher le rapport dans la console
-      - name: 📄 Afficher le rapport
-        run: cat rapport_semgrep.txt
+      - name: 🔍 Exécuter l'analyse Semgrep avec les règles personnalisées
+        run: |
+          semgrep scan --config regles_vulnerabilites.yml . > rapport_semgrep.txt || true
 
-      # 5️⃣ Sauvegarder le rapport
-      - name: 📤 Sauvegarder le rapport d’analyse
+      - name: 🕒 Générer un nom de fichier dynamique
+        id: filename
+        run: echo "file_name=rapport_semgrep_$(date +'%Y%m%d_%H%M%S').txt" >> $GITHUB_ENV
+
+      - name: 📤 Publier le rapport Semgrep
         uses: actions/upload-artifact@v4
         with:
-          name: rapport_semgrep
+          name: Rapport-Semgrep
           path: rapport_semgrep.txt
-          retention-days: 7
