@@ -22,6 +22,8 @@ jobs:
 
       - name: Run SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v2
+        with:
+          projectBaseDir: .
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_PHP_TOKEN }}
           SONAR_HOST_URL: https://dedicated-emerita-unallied.ngrok-free.dev
