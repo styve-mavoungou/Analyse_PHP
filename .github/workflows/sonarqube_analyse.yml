@@ -1,14 +1,15 @@
-name: Analyse Statique avec SonarQube 
+name: Analyse Statique avec SonarQube
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   sonarqube_scan:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,29 +20,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install sonar-scanner
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y unzip curl
-          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-5.0.1.3006-linux.zip
-          unzip sonar-scanner.zip -d /opt/
-          mv /opt/sonar-scanner-* /opt/sonar-scanner
-          echo "/opt/sonar-scanner/bin" >> $GITHUB_PATH
-
-      - name: Show sonar config file
-        run: |
-          echo "=== sonar-project.properties ==="
-          cat sonar-project.properties || true
-
-      - name: Run SonarScanner (use public ngrok URL to reach your SonarQube)
+      - name: Run SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v2
         env:
-          SONAR_HOST_URL: https://dedicated-emerita-unallied.ngrok-free.dev    
-          SONAR_LOGIN: ${{ secrets.SONAR_PHP_TOKEN }}
-        run: |
-          echo "Using SONAR_HOST_URL=$SONAR_HOST_URL"
-          sonar-scanner \
-            -Dsonar.projectKey=projet_php \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=$SONAR_HOST_URL \
-            -Dsonar.login=$SONAR_LOGIN \
-            -Dsonar.sourceEncoding=UTF-8
+          SONAR_TOKEN: ${{ secrets.SONAR_PHP_TOKEN }}
+          SONAR_HOST_URL: https://dedicated-emerita-unallied.ngrok-free.dev
