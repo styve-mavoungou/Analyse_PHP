@@ -1,4 +1,4 @@
-name: Analyse SAST avec SonarQube 
+name: Analyse Statique avec SonarQube 
 
 on:
   push:
