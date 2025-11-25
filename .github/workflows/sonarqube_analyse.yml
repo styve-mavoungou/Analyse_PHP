@@ -26,4 +26,4 @@ jobs:
           projectBaseDir: .
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_PHP_TOKEN }}
-          SONAR_HOST_URL: https://dedicated-emerita-unallied.ngrok-free.dev
+          SONAR_HOST_URL: ${{ secrets.SONAR_PHP_HOST }}
